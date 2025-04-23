@@ -69,7 +69,6 @@ seurat_matrix <- RunPCA(seurat_matrix, features = VariableFeatures(object = seur
 #Plots for visualization after PCA
 ElbowPlot(seurat_matrix) 
 DimPlot(seurat_matrix, reduction = "pca")
-DimHeatmap(seurat_matrix, dims = 1, balanced = TRUE)
 DimHeatmap(seurat_matrix, dims = 1:15, balanced = TRUE)
 
 #Pair-wise distancing
@@ -185,6 +184,12 @@ seurat_matrix$grouped_cell_type <- ifelse(
   "Adult", 
   ifelse(seurat_matrix$cell_type == "fetal_quiescent", "Fetal_quiescent", "Fetal_replicating")
 )
+
+#normalisation, scaling, PCA
+seurat_matrix <- NormalizeData(seurat_matrix)
+seurat_matrix <- FindVariableFeatures(seurat_matrix)
+seurat_matrix <- ScaleData(seurat_matrix)
+seurat_matrix <- RunPCA(seurat_matrix, npcs = 10)
 
 #UMAP plot colored by grouped cell type
 seurat_matrix <- RunUMAP(seurat_matrix, dims = 1:10)

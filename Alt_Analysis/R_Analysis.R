@@ -1,4 +1,4 @@
-#ALTERNATIVE ANALYSIS
+#Alternative clustering pipeline for scRNA-seq analysis of the Darmanis et al. (2015) dataset
 
 #loading necessary libraries
 library(Seurat)
@@ -7,54 +7,44 @@ library(patchwork)
 library(ggplot2)
 library(dplyr)
 library(tidyr)
+library(plotly)
+library(shiny)
+library(clustree)
 
-#changing working directory
-setwd('/home/hf180/Desktop/scRNAseq')
+#setting working directory
+setwd('/home/hf180/Desktop/scRNAseq/scRNAseq-GroupB/finished_GeneMatrices/alternative_GeneCounts')
 
-#obtaining files from github
-#system("git clone https://github.com/hf180/scRNAseq-GroupB.git")
-
-#changing working directory to directory with gene counts from alterantive pipeline
-setwd('/home/hf180/Desktop/scRNAseq/matrix')
-
-#loading the files - code adapted from https://stackoverflow.com/questions/15102499/loading-multiple-files-into-matrix-using-r
-temp <- list.files(pattern = "*.csv")
-
-#creating the matrix
-df_list <- lapply(temp, function(file) {read.table(file, sep="\t", row.names = 1)})
-
-#combining all data frames into one large matrix column-wise 
-matrix <- do.call(cbind, df_list)
-
-#converting the matrix into a matrix readable by R
-matrix <- as.matrix(matrix)
-
-#changing the column names to match the cell names
-cleaned_names <- gsub(".csv", "", temp) #extracting file name without .csv extension (.csv is the recurring pattern being replaced with "")
-colnames(matrix) <- make.names(cleaned_names, unique = TRUE)
+#loading data into a data frame
+results <- read.csv("alt_results.csv", row.names = 1)
+matrix <- as.matrix(results)
 
 #creating a Seurat object
 seurat_matrix <- CreateSeuratObject(counts = matrix, project = "scRNAseq")
 
 #checking the Seurat object
 str(seurat_matrix)
-head(colnames(seurat_matrix)) #SRR IDs
-head(rownames(seurat_matrix)) #gene names
+head(colnames(seurat_matrix))  # GSM and SRR IDs (sample names)
+head(rownames(seurat_matrix))  # Gene names
 dim(seurat_matrix)
 
-#removing whitespace from gene names
+#cleaning row and column names
 rownames(seurat_matrix) <- trimws(rownames(seurat_matrix))
+colnames(seurat_matrix) <- sub("^X\\.", "", colnames(seurat_matrix))
+
+#taking first 466 cells
+cells_to_keep <- colnames(seurat_matrix)[1:466]
+seurat_matrix <- subset(seurat_matrix, cells = cells_to_keep)
 
 #visualizing QC metrics
 VlnPlot(seurat_matrix, features = c("nFeature_RNA", "nCount_RNA"), ncol=3)
 FeatureScatter(seurat_matrix, feature = "nCount_RNA", feature2 = "nFeature_RNA")
 
 #quality control - filtering low quality cells 
-seurat_matrix <- subset(seurat_matrix, subset = nCount_RNA > 400000) #remove cells with less than 400000 total RNA counts
+seurat_matrix <- subset(seurat_matrix, subset = nCount_RNA < 16000 & nFeature_RNA < 10000)
 seurat_matrix <- NormalizeData(seurat_matrix) #default "LogNormalize"
-seurat_matrix <- FindVariableFeatures(seurat_matrix)
 
-#plotting top 10 highly variable genes 
+#plotting top 10 highly variable genes
+seurat_matrix <- FindVariableFeatures(seurat_matrix)
 top10 <- head(VariableFeatures(seurat_matrix),10)
 plot1 <- VariableFeaturePlot(seurat_matrix)
 plot2 <- LabelPoints(plot = plot1, points = top10, repel = TRUE)
@@ -69,25 +59,40 @@ seurat_matrix <- RunPCA(seurat_matrix, features = VariableFeatures(object = seur
 #Plots for visualization after PCA
 ElbowPlot(seurat_matrix) 
 DimPlot(seurat_matrix, reduction = "pca")
-DimHeatmap(seurat_matrix, dims = 1:15, balanced = TRUE)
+DimHeatmap(seurat_matrix, dims = 1:10, balanced = TRUE)
 
 #Pair-wise distancing
-pca_embeddings <- Embeddings(seurat_matrix, "pca") #extracts coordinates of cells in PCA
+pca_embeddings <- Embeddings(seurat_matrix, "pca")[, 1:10] #extracts coordinates of cells in PCA
 pairwise_distances <- dist(pca_embeddings) #pairwise distances calculated (Euclidean distance) between cells based on PCA embedding
-heatmap(as.matrix(pairwise_distances), main = "Pairwise Distance Heatmap") #closer cells have similar gene expression profiles
+pairwise_distances_matrix <- as.matrix(pairwise_distances)
+heatmap(pairwise_distances_matrix, main = "Pairwise Distance Heatmap") #closer cells have similar gene expression profiles
+
+#plotting pairwise distances with Plotly
+heatmap_plot <- plot_ly(
+  x = colnames(pairwise_distances_matrix),
+  y = rownames(pairwise_distances_matrix),
+  z = pairwise_distances_matrix,
+  type = "heatmap",
+  colors = colorRampPalette(c("blue", "red"))(100)
+)
+heatmap_plot
 
 #reducing noise after PCA by identifying statistically significant PCs (permutation)
 seurat_matrix <- JackStraw(seurat_matrix, num.replicate = 100)
-seurat_matrix <- ScoreJackStraw(seurat_matrix, dims = 1:10)
-JackStrawPlot(seurat_matrix, dims = 1:10)
+seurat_matrix <- ScoreJackStraw(seurat_matrix, dims = 1:20)
+JackStrawPlot(seurat_matrix, dims = 1:20)
 
-#unbiased clustering
+#unbiased clustering for multiple resolutions
 seurat_matrix <- FindNeighbors(seurat_matrix, dims = 1:10)
-seurat_matrix <- FindClusters(seurat_matrix)  #res = 1.1 results in 10 clusters, deafult 0.8 in 7 clusters
+seurat_matrix <- FindClusters(seurat_matrix, resolution = c(0.4, 0.6, 0.8, 1.0))
+clustree(seurat_matrix)
 
 #UMAP visualisation of unbiased clusters
 seurat_matrix <- RunUMAP(seurat_matrix, dims = 1:10)
-DimPlot(seurat_matrix, reduction = "umap", group.by = "seurat_clusters") + ggtitle("Seurat Clusters") + theme(plot.title = element_text(size = 20, face = "bold"))
+umap_plot <- DimPlot(seurat_matrix, reduction = "umap", group.by = "seurat_clusters") + 
+  ggtitle("Seurat Clusters") + theme(plot.title = element_text(size = 20, face = "bold"))
+umap_plot <- ggplotly(umap_plot)
+umap_plot
 
 #all genes in the clusters
 unbiased_markers <- FindAllMarkers(seurat_matrix, only.pos = TRUE)
@@ -163,7 +168,9 @@ cell_type_vector <- metadata_df$cell_type[match(gsm_ids, metadata_df$GSM)]
 seurat_matrix$cell_type <- cell_type_vector
 
 #UMAP by cell type
-DimPlot(seurat_matrix, group.by = "cell_type", label = TRUE, repel = TRUE)
+umap_by_cell_type <- DimPlot(seurat_matrix, group.by = "cell_type", label = TRUE, repel = TRUE)
+umap_by_cell_type <- ggplotly(umap_by_cell_type)
+umap_by_cell_type
 
 #creating a new column to store numeric age
 metadata_df$age_numeric <- as.numeric(gsub(".*?(\\d+).*", "\\1", metadata_df$age))
@@ -191,22 +198,45 @@ seurat_matrix <- FindVariableFeatures(seurat_matrix)
 seurat_matrix <- ScaleData(seurat_matrix)
 seurat_matrix <- RunPCA(seurat_matrix, npcs = 10)
 
-#UMAP plot colored by grouped cell type
+#UMAP plot coloured by grouped cell type
 seurat_matrix <- RunUMAP(seurat_matrix, dims = 1:10)
-DimPlot(seurat_matrix, reduction = "umap", group.by = "grouped_cell_type")
+umap_grouped_cell_type <- DimPlot(seurat_matrix, reduction = "umap", group.by = "grouped_cell_type")
+umap_grouped_cell_type <- ggplotly(umap_grouped_cell_type)
+umap_grouped_cell_type
 
 #distribution of cell types in each cluster
-confusion_matrix <- table(Cluster = seurat_matrix$seurat_clusters, CellType = seurat_matrix$cell_type)
-#write.csv(as.data.frame(confusion_matrix), file = "cluster_vs_celltype.csv", row.names = FALSE)
+confusion_matrix <- table(seurat_matrix$seurat_clusters, seurat_matrix$cell_type)
+write.csv(as.data.frame(confusion_matrix), file = "cluster_vs_celltype.csv", row.names = FALSE)
 #convert the confusion matrix to a data frame
 confusion_matrix_df <- as.data.frame(confusion_matrix)
+
 #bar plot
-ggplot(confusion_matrix_df, aes(x = Cluster, y = Freq, fill = CellType)) +
-  geom_bar(stat = "identity") + 
-  labs(x = "Cluster", y = "Cell Count", title = "Distribution of Cell Types in Each Cluster")
+bar_plot_cell_type <- plot_ly(
+  data = confusion_matrix_df,
+  x = ~Cluster,
+  y = ~Freq,
+  color = ~CellType,
+  type = "bar"
+) %>%
+  layout(
+    title = "Distribution of Cell Types in Each Cluster",
+    xaxis = list(title = "Cluster"),
+    yaxis = list(title = "Cell Count")
+  )
+bar_plot_cell_type
 
 #agreement between seurat clusters and darmanis clusters
-ggplot(confusion_matrix_df, aes(x = CellType, y = Freq, fill = as.factor(Cluster))) +
-  geom_bar(stat = "identity") +
-  labs(x = "Biased Cell Type", y = "Cell Count", 
-       title = "Agreement Between Cell-Type Assignment")
+agreement_plot <- plot_ly(
+  data = confusion_matrix_df,
+  x = ~CellType,
+  y = ~Freq,
+  color = ~as.factor(Cluster),
+  type = "bar",
+  colors = "Set2"
+) %>%
+  layout(
+    title = "Agreement Between Cell-Type Assignment",
+    xaxis = list(title = "Biased Cell Type"),
+    yaxis = list(title = "Cell Count")
+  )
+agreement_plot

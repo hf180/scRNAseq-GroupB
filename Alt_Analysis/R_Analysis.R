@@ -84,8 +84,9 @@ JackStrawPlot(seurat_matrix, dims = 1:20)
 
 #unbiased clustering for multiple resolutions
 seurat_matrix <- FindNeighbors(seurat_matrix, dims = 1:10)
-seurat_matrix <- FindClusters(seurat_matrix, resolution = c(0.4, 0.6, 0.8, 1.0))
+seurat_matrix <- FindClusters(seurat_matrix, res = c(0.4, 0.6, 0.8, 1.0))
 clustree(seurat_matrix)
+seurat_matrix <- FindClusters(seurat_matrix, res = 0.8) #selecting resolution based on clustree results
 
 #UMAP visualisation of unbiased clusters
 seurat_matrix <- RunUMAP(seurat_matrix, dims = 1:10)
@@ -168,6 +169,7 @@ cell_type_vector <- metadata_df$cell_type[match(gsm_ids, metadata_df$GSM)]
 seurat_matrix$cell_type <- cell_type_vector
 
 #UMAP by cell type
+#DimPlot(seurat_matrix, group.by = "cell_type", label = TRUE, repel = TRUE, label.box = TRUE) - to obtain labelled image
 umap_by_cell_type <- DimPlot(seurat_matrix, group.by = "cell_type", label = TRUE, repel = TRUE)
 umap_by_cell_type <- ggplotly(umap_by_cell_type)
 umap_by_cell_type

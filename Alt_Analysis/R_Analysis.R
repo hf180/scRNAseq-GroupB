@@ -172,43 +172,11 @@ umap_by_cell_type <- DimPlot(seurat_matrix, group.by = "cell_type", label = TRUE
 umap_by_cell_type <- ggplotly(umap_by_cell_type)
 umap_by_cell_type
 
-#creating a new column to store numeric age
-metadata_df$age_numeric <- as.numeric(gsub(".*?(\\d+).*", "\\1", metadata_df$age))
-
-#checking if changes are reflected
-head(metadata_df$age_numeric)
-
-#assigning changes to seurat object
-age_numeric_vector <- metadata_df$age_numeric[match(gsm_ids, metadata_df$GSM)]
-seurat_matrix$age_numeric <- age_numeric_vector
-
-head(seurat_matrix@meta.data)
-
-#subsetting cell types into adult, fetal_quiescent, and fetal_replicating
-#creating a new column for 'grouped_cell_type'
-seurat_matrix$grouped_cell_type <- ifelse(
-  seurat_matrix$cell_type %in% c("astrocytes", "endothelial", "hybrid", "microglia", "neurons", "oligodendrocytes", "OPC"),
-  "Adult", 
-  ifelse(seurat_matrix$cell_type == "fetal_quiescent", "Fetal_quiescent", "Fetal_replicating")
-)
-
-#normalisation, scaling, PCA
-seurat_matrix <- NormalizeData(seurat_matrix)
-seurat_matrix <- FindVariableFeatures(seurat_matrix)
-seurat_matrix <- ScaleData(seurat_matrix)
-seurat_matrix <- RunPCA(seurat_matrix, npcs = 10)
-
-#UMAP plot coloured by grouped cell type
-seurat_matrix <- RunUMAP(seurat_matrix, dims = 1:10)
-umap_grouped_cell_type <- DimPlot(seurat_matrix, reduction = "umap", group.by = "grouped_cell_type")
-umap_grouped_cell_type <- ggplotly(umap_grouped_cell_type)
-umap_grouped_cell_type
-
 #distribution of cell types in each cluster
 confusion_matrix <- table(seurat_matrix$seurat_clusters, seurat_matrix$cell_type)
-write.csv(as.data.frame(confusion_matrix), file = "cluster_vs_celltype.csv", row.names = FALSE)
 #convert the confusion matrix to a data frame
 confusion_matrix_df <- as.data.frame(confusion_matrix)
+colnames(confusion_matrix_df) <- c("Cluster", "CellType", "Freq")
 
 #bar plot
 bar_plot_cell_type <- plot_ly(
@@ -240,3 +208,35 @@ agreement_plot <- plot_ly(
     yaxis = list(title = "Cell Count")
   )
 agreement_plot
+
+#creating a new column to store numeric age
+metadata_df$age_numeric <- as.numeric(gsub(".*?(\\d+).*", "\\1", metadata_df$age))
+
+#checking if changes are reflected
+head(metadata_df$age_numeric)
+
+#assigning changes to seurat object
+age_numeric_vector <- metadata_df$age_numeric[match(gsm_ids, metadata_df$GSM)]
+seurat_matrix$age_numeric <- age_numeric_vector
+
+head(seurat_matrix@meta.data)
+
+#subsetting cell types into adult, fetal_quiescent, and fetal_replicating
+#creating a new column for 'grouped_cell_type'
+seurat_matrix$grouped_cell_type <- ifelse(
+  seurat_matrix$cell_type %in% c("astrocytes", "endothelial", "hybrid", "microglia", "neurons", "oligodendrocytes", "OPC"),
+  "Adult", 
+  ifelse(seurat_matrix$cell_type == "fetal_quiescent", "Fetal_quiescent", "Fetal_replicating")
+)
+
+#normalisation, scaling, PCA
+seurat_matrix <- NormalizeData(seurat_matrix)
+seurat_matrix <- FindVariableFeatures(seurat_matrix)
+seurat_matrix <- ScaleData(seurat_matrix)
+seurat_matrix <- RunPCA(seurat_matrix, npcs = 10)
+
+#UMAP plot coloured by grouped cell type
+seurat_matrix <- RunUMAP(seurat_matrix, dims = 1:10)
+umap_grouped_cell_type <- DimPlot(seurat_matrix, reduction = "umap", group.by = "grouped_cell_type")
+umap_grouped_cell_type <- ggplotly(umap_grouped_cell_type)
+umap_grouped_cell_type

@@ -1,4 +1,5 @@
-#load this libraries
+#Obtaining the gene count matrix using mapped read data generated using an alternative approach
+
 library(tidyr)
 library(dplyr)
 library(readr)
@@ -72,6 +73,7 @@ if (!is.null(mart)) {
 } else {
   message("Failed to connect to Ensembl.")
 }
+
 #find all cleaned files
 files <- list.files("/home/hf180/Desktop/scRNAseq/scRNAseq-GroupB/finished_GeneMatrices/alternative_GeneCounts/cleaned_counts", pattern = "*.csv", full.names = TRUE)
 
